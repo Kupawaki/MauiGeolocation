@@ -1,12 +1,15 @@
 ﻿using System.Diagnostics;
-using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Controls.Maps;
+using Microsoft.Maui.Maps;
+using Map = Microsoft.Maui.Controls.Maps.Map;
 
 namespace MauiGeolocation;
 
 public partial class MainPage : ContentPage
 {
-	private CancellationTokenSource cancelTokenSource;
-	private bool currentlyCheckingLocation = false;
+	private bool setupComplete = false;
+	private Location lastLocation;
+    private Map map;
 
 	public MainPage()
 	{
@@ -15,48 +18,31 @@ public partial class MainPage : ContentPage
 
 	private async void GetCurrentLocation(Object sender, EventArgs e)
 	{
-		await CheckAndRequestLocationPermission();
-		await GetCurrentLocationTask();
-	}
-
-	private async Task GetCurrentLocationTask()
-	{
-		try
+		if(!setupComplete)
 		{
-			currentlyCheckingLocation = true;
-			cancelTokenSource = new CancellationTokenSource();
-
-			GeolocationRequest geoRequest = new GeolocationRequest(GeolocationAccuracy.Best, TimeSpan.FromSeconds(15));
-			Location location = await Geolocation.Default.GetLocationAsync(geoRequest, cancelTokenSource.Token);
-
-			if(location != null)
-			{
-				Debug.WriteLine($"\n{location}");
-			}
-		}
-		catch(PermissionException permissionException)
-		{
-			Debug.WriteLine($"Permission Exception {permissionException.Message}");
-		}
-		catch(FeatureNotEnabledException featureNotEnabledException)
-		{
-            Debug.WriteLine($"Feature Enabled Exception {featureNotEnabledException.Message}");
+            await CheckAndRequestLocationPermission();
+            await GetCurrentLocationTask();
+            CreateMap();
         }
-		catch(FeatureNotSupportedException featureNotSupportedException)
+		else
 		{
-            Debug.WriteLine($"Feature Supported Exception {featureNotSupportedException.Message}");
-        }
-		catch(Exception ex)
-		{
-            Debug.WriteLine($"Exception {ex.Message}");
-        }
-		finally
-		{
+            await GetCurrentLocationTask();
 
-		}
-	}
+            MapSpan mapSpan = new MapSpan(lastLocation, 0.01, 0.01);
+            map.MoveToRegion(mapSpan);
 
-    public async Task<PermissionStatus> CheckAndRequestLocationPermission()
+            Pin newPin = new Pin
+            {
+                Label = "location",
+                Location = lastLocation,
+                Type = PinType.Generic
+            };
+
+            map.Pins.Add(newPin);
+        }
+    }
+
+    private async Task<PermissionStatus> CheckAndRequestLocationPermission()
     {
         PermissionStatus status = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
 
@@ -78,6 +64,66 @@ public partial class MainPage : ContentPage
         status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
 
         return status;
+    }
+
+    private async Task GetCurrentLocationTask()
+	{
+		try
+		{
+			CancellationTokenSource cancelTokenSource = new CancellationTokenSource();
+
+			GeolocationRequest geoRequest = new GeolocationRequest(GeolocationAccuracy.Best, TimeSpan.FromSeconds(15));
+			Location location = await Geolocation.Default.GetLocationAsync(geoRequest, cancelTokenSource.Token);
+
+			if(location != null)
+			{
+				Debug.WriteLine($"\n{location}");
+				lastLocation = location;
+            }
+		}
+		catch(PermissionException permissionException)
+		{
+			Debug.WriteLine($"Permission Exception {permissionException.Message}");
+		}
+		catch(FeatureNotEnabledException featureNotEnabledException)
+		{
+            Debug.WriteLine($"Feature Enabled Exception {featureNotEnabledException.Message}");
+        }
+		catch(FeatureNotSupportedException featureNotSupportedException)
+		{
+            Debug.WriteLine($"Feature Supported Exception {featureNotSupportedException.Message}");
+        }
+		catch(Exception ex)
+		{
+            Debug.WriteLine($"Exception {ex.Message}");
+        }
+	}
+
+	private void CreateMap()
+	{
+	    map = new Map
+		{
+			HeightRequest = 1000,
+			WidthRequest = 1000,
+			MapType = MapType.Satellite
+		};
+
+        holder.Add(map);
+
+
+		MapSpan mapSpan = new MapSpan(lastLocation, 0.01, 0.01);
+        map.MoveToRegion(mapSpan);
+
+        Pin newPin = new Pin
+        {
+            Label = "location",
+            Location = lastLocation,
+            Type = PinType.Generic
+        };
+
+        map.Pins.Add(newPin);
+
+        setupComplete = true;
     }
 }
 
